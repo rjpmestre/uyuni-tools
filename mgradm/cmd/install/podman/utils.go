@@ -125,24 +125,8 @@ func installForPodman(
 
 	if err := install_shared.RunSetup(cnx, &flags.InstallFlags, fqdn, env); err != nil {
 		if stopErr := shared_podman.StopService(shared_podman.ServerService); stopErr != nil {
-			log.Error().Msgf(L("Failed to stop service: %v"), stopErr)
+			log.Error().Msgf("Failed to stop service: %v", stopErr)
 		}
-		return err
-	}
-
-	if path, err := exec.LookPath("uyuni-payg-extract-data"); err == nil {
-		// the binary is installed
-		err = utils.RunCmdStdMapping(zerolog.DebugLevel, path)
-		if err != nil {
-			return utils.Errorf(err, L("failed to extract payg data"))
-		}
-	}
-
-	if err := coco.SetupCocoContainer(flags.Coco.Replicas, flags.Coco.Image, flags.Image, flags.Db.Name, flags.Db.Port, flags.Db.User, flags.Db.Password); err != nil {
-		return err
-	}
-
-	if err := setupHubXmlrpcContainer(flags); err != nil {
 		return err
 	}
 
