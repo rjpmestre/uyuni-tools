@@ -21,7 +21,6 @@ func kubernetesSquidClear(
 	cmd *cobra.Command,
 	args []string,
 ) error {
-
 	cnx := shared.NewConnection("kubectl", "", kubernetes.ProxyFilter)
 	podName, err := cnx.GetPodName()
 	if err != nil {

@@ -175,7 +175,7 @@ func CreateVolume(name string, dryRun bool) error {
 			log.Info().Msgf(L("Run %s"), "podman volume create "+name)
 			err := utils.RunCmd("podman", "volume", "create", name)
 			if err != nil {
-				log.Error().Err(err).Msgf(L("Failed to create volume %s"), name)
+				return utils.Errorf(err, L("Failed to create volume %s"), name)
 			}
 		}
 	}
