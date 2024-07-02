@@ -44,17 +44,6 @@ func NewConnection(backend string, podmanContainer string, kubernetesFilter stri
 	return &cnx
 }
 
-// An explicit constructor for a kubernetes connection
-// Allows to specify:
-// - namespace: the namespace where the pod is running
-// - kubernetesFilter: a filter to find the pod
-// - kubernetesContainer: the container name.
-func NewKubernetesConnection(namespace string, kubernetesFilter string, kubernetesContainer string) *Connection {
-	cnx := Connection{backend: "kubectl", namespace: namespace, kubernetesFilter: kubernetesFilter, kubernetesContainer: kubernetesContainer}
-
-	return &cnx
-}
-
 // GetCommand validates or guesses the connection backend command.
 func (c *Connection) GetCommand() (string, error) {
 	var err error
@@ -122,6 +111,47 @@ func (c *Connection) GetCommand() (string, error) {
 	return c.command, err
 }
 
+// GetNamespace finds the namespace of the running pod.
+func (c *Connection) GetNamespace() (string, error) {
+	// skip if namespace is already set
+	if c.namespace != "" {
+		return c.namespace, nil
+	}
+
+	command, cmdErr := c.GetCommand()
+	if cmdErr != nil {
+		log.Fatal().Err(cmdErr)
+	}
+
+	// skip if the command is not resolvable or does not target kubectl
+	if command != "kubectl" {
+		return c.namespace, nil
+	}
+
+	appName := kubernetes.ServerApp
+	if c.kubernetesFilter == kubernetes.ProxyFilter {
+		appName = kubernetes.ProxyApp
+	}
+
+	clusterInfos, clusterInfosErr := kubernetes.CheckCluster()
+	if clusterInfosErr != nil {
+		return "", utils.Errorf(clusterInfosErr, L("failed to discover the cluster type"))
+	}
+
+	kubeconfig := clusterInfos.GetKubeconfig()
+	if !kubernetes.HasHelmRelease(appName, kubeconfig) {
+		return "", fmt.Errorf(L("no %s helm release installed on the cluster"), appName)
+	}
+
+	var namespaceErr error
+	c.namespace, namespaceErr = kubernetes.ExtractNamespaceFromConfig(appName, kubeconfig)
+	if namespaceErr != nil {
+		return "", utils.Errorf(namespaceErr, L("failed to find the %s deployment namespace"), appName)
+	}
+
+	return c.namespace, nil
+}
+
 // GetPodName finds the name of the running pod.
 func (c *Connection) GetPodName() (string, error) {
 	var err error
@@ -143,9 +173,10 @@ func (c *Connection) GetPodName() (string, error) {
 			}
 		case "kubectl":
 			// We try the first item on purpose to make the command fail if not available
-			podName, err := utils.RunCmdOutput(zerolog.DebugLevel, "kubectl", "get", "pod", c.kubernetesFilter, "-A",
-				"-o=jsonpath={.items[0].metadata.name}")
-			if err == nil {
+			if podName, _ := utils.RunCmdOutput(zerolog.DebugLevel, "kubectl", "get", "pod", c.kubernetesFilter, "-A",
+				"-o=jsonpath={.items[0].metadata.name}"); len(podName) == 0 {
+				err = fmt.Errorf(L("container labeled %s is not running on kubectl"), c.kubernetesFilter)
+			} else {
 				c.podName = string(podName[:])
 			}
 		}
@@ -154,13 +185,18 @@ func (c *Connection) GetPodName() (string, error) {
 	return c.podName, err
 }
 
+// ExecInKubernetesContainer runs command within an sh shell targeting a specific container.
+func (c *Connection) ExecInKubernetesContainer(kubernetesContainer string, command string, args ...string) ([]byte, error) {
+	c.kubernetesContainer = kubernetesContainer
+	return c.Exec(command, args...)
+}
+
 // Exec runs command inside the container within an sh shell.
 func (c *Connection) Exec(command string, args ...string) ([]byte, error) {
 	if c.podName == "" {
 		if _, err := c.GetPodName(); c.podName == "" {
 			commandStr := fmt.Sprintf("%s %s", command, strings.Join(args, " "))
-			return nil, utils.Errorf(err, L("the container is not running, %s command not executed:"),
-				commandStr)
+			return nil, utils.Errorf(err, L("%s command not executed:"), commandStr)
 		}
 	}
 
@@ -171,22 +207,16 @@ func (c *Connection) Exec(command string, args ...string) ([]byte, error) {
 
 	cmdArgs := []string{"exec", c.podName}
 	if cmd == "kubectl" {
-		namespace := c.namespace
-		if namespace == "" {
-			var namespaceErr error
-			namespace, namespaceErr = kubernetes.GetNamespace(c.kubernetesFilter)
-
-			if namespaceErr != nil {
-				return nil, utils.Errorf(namespaceErr, L("failed to discover the cluster type"))
+		if c.namespace == "" {
+			if _, err := c.GetNamespace(); c.namespace == "" {
+				return nil, utils.Errorf(err, L("failed to retrieve namespace "))
 			}
 		}
 
-		container := c.kubernetesContainer
 		if c.kubernetesContainer == "" {
-			container = "uyuni"
+			c.kubernetesContainer = "uyuni"
 		}
-
-		cmdArgs = append(cmdArgs, "-n", namespace, "-c", container, "--")
+		cmdArgs = append(cmdArgs, "-n", c.namespace, "-c", c.kubernetesContainer, "--")
 	}
 	shellArgs := append([]string{command}, args...)
 	cmdArgs = append(cmdArgs, shellArgs...)

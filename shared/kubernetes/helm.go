@@ -6,8 +6,6 @@ package kubernetes
 
 import (
 	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -84,7 +82,7 @@ func HelmUninstall(kubeconfig string, deployment string, filter string, dryRun b
 	namespace := string(out)
 	if namespace == "" {
 		log.Debug().Msgf("Pod is not running, trying to find the namespace using the helm release")
-		namespace, err = FindNamespace(deployment, kubeconfig)
+		namespace, err = ExtractNamespaceFromConfig(deployment, kubeconfig)
 		if err != nil {
 			log.Info().Err(err).Msgf(L("Cannot guess namespace"))
 			return "", nil
@@ -104,28 +102,6 @@ func HelmUninstall(kubeconfig string, deployment string, filter string, dryRun b
 		}
 	}
 	return namespace, nil
-}
-
-// FindNamespace tries to find the deployment namespace using helm.
-func FindNamespace(deployment string, kubeconfig string) (string, error) {
-	args := []string{}
-	if kubeconfig != "" {
-		args = append(args, "--kubeconfig", kubeconfig)
-	}
-	args = append(args, "list", "-aA", "-f", deployment, "-o", "json")
-	out, err := utils.RunCmdOutput(zerolog.DebugLevel, "helm", args...)
-	if err != nil {
-		return "", utils.Errorf(err, L("failed to detect %s's namespace using helm"), deployment)
-	}
-	var data []releaseInfo
-	if err = json.Unmarshal(out, &data); err != nil {
-		return "", utils.Errorf(err, L("helm provided an invalid JSON output"))
-	}
-
-	if len(data) == 1 {
-		return data[0].Namespace, nil
-	}
-	return "", errors.New(L("found no or more than one deployment"))
 }
 
 // HasHelmRelease returns whether a helm release is installed or not, even if it failed.

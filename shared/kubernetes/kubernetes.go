@@ -6,7 +6,8 @@ package kubernetes
 
 import (
 	"encoding/base64"
-	"fmt"
+	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 
@@ -152,27 +153,27 @@ func GetSecret(secretName string, filter string) (string, error) {
 	return string(decoded), nil
 }
 
-// GetNamespace returns the namespace either for a uyuni or uyuni-proxy deployment.
-func GetNamespace(kubernetesFilter string) (string, error) {
-	release := "uyuni"
-	if kubernetesFilter == ProxyApp {
-		release = "uyuni-proxy"
+// ExtractNamespaceFromConfig extracts the namespace of a given application
+// from the Helm release information from an also given kubeconfig file (path).
+func ExtractNamespaceFromConfig(appName string, kubeconfig string) (string, error) {
+	args := []string{}
+	if kubeconfig != "" {
+		args = append(args, "--kubeconfig", kubeconfig)
 	}
+	args = append(args, "list", "-aA", "-f", appName, "-o", "json")
 
-	clusterInfos, err := CheckCluster()
+	out, err := utils.RunCmdOutput(zerolog.DebugLevel, "helm", args...)
 	if err != nil {
-		return "", utils.Errorf(err, L("failed to discover the cluster type"))
+		return "", utils.Errorf(err, L("failed to detect %s's namespace using helm"), appName)
 	}
 
-	kubeconfig := clusterInfos.GetKubeconfig()
-	if !HasHelmRelease(release, kubeconfig) {
-		return "", fmt.Errorf(L("no %s helm release installed on the cluster"), release)
+	var data []releaseInfo
+	if err = json.Unmarshal(out, &data); err != nil {
+		return "", utils.Errorf(err, L("helm provided an invalid JSON output"))
 	}
 
-	namespace, err := FindNamespace(release, kubeconfig)
-	if err != nil {
-		return "", utils.Errorf(err, L("failed to find the %s deployment namespace"), release)
+	if len(data) == 1 {
+		return data[0].Namespace, nil
 	}
-
-	return namespace, nil
+	return "", errors.New(L("found no or more than one deployment"))
 }
