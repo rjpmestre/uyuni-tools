@@ -62,46 +62,26 @@ func HelmUpgrade(kubeconfig string, namespace string, install bool,
 }
 
 // HelmUninstall runs the helm uninstall command to remove a deployment.
-func HelmUninstall(kubeconfig string, deployment string, filter string, dryRun bool) (string, error) {
+func HelmUninstall(namespace string, kubeconfig string, deployment string, dryRun bool) error {
+	if namespace == "" {
+		return fmt.Errorf(L("namespace is required"))
+	}
+
 	helmArgs := []string{}
 	if kubeconfig != "" {
 		helmArgs = append(helmArgs, "--kubeconfig", kubeconfig)
 	}
+	helmArgs = append(helmArgs, "uninstall", "-n", namespace, deployment)
 
-	jsonpath := fmt.Sprintf("jsonpath={.items[?(@.metadata.name==\"%s\")].metadata.namespace}", deployment)
-	args := []string{"get", "-A", "deploy", "-o", jsonpath}
-	if filter != "" {
-		args = append(args, filter)
-	}
-
-	out, err := utils.RunCmdOutput(zerolog.DebugLevel, "kubectl", args...)
-	if err != nil {
-		log.Info().Err(err).Msgf(L("Failed to find %s's namespace, skipping removal"), deployment)
-	}
-
-	namespace := string(out)
-	if namespace == "" {
-		log.Debug().Msgf("Pod is not running, trying to find the namespace using the helm release")
-		namespace, err = ExtractNamespaceFromConfig(deployment, kubeconfig)
-		if err != nil {
-			log.Info().Err(err).Msgf(L("Cannot guess namespace"))
-			return "", nil
+	if dryRun {
+		log.Info().Msgf(L("Would run %s"), "helm "+strings.Join(helmArgs, " "))
+	} else {
+		log.Info().Msgf(L("Uninstalling %s"), deployment)
+		if err := utils.RunCmd("helm", helmArgs...); err != nil {
+			return utils.Errorf(err, L("failed to run helm %s"), strings.Join(helmArgs, " "))
 		}
 	}
-
-	if namespace != "" {
-		helmArgs = append(helmArgs, "uninstall", "-n", namespace, deployment)
-
-		if dryRun {
-			log.Info().Msgf(L("Would run %s"), "helm "+strings.Join(helmArgs, " "))
-		} else {
-			log.Info().Msgf(L("Uninstalling %s"), deployment)
-			if err := utils.RunCmd("helm", helmArgs...); err != nil {
-				return namespace, utils.Errorf(err, L("failed to run helm %s"), strings.Join(helmArgs, " "))
-			}
-		}
-	}
-	return namespace, nil
+	return nil
 }
 
 // HasHelmRelease returns whether a helm release is installed or not, even if it failed.
@@ -116,8 +96,4 @@ func HasHelmRelease(release string, kubeconfig string) bool {
 		return len(bytes.TrimSpace(out)) != 0 && err == nil
 	}
 	return false
-}
-
-type releaseInfo struct {
-	Namespace string `mapstructure:"namespace"`
 }

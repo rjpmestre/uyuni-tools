@@ -6,8 +6,6 @@ package kubernetes
 
 import (
 	"encoding/base64"
-	"encoding/json"
-	"errors"
 	"os"
 	"strings"
 
@@ -151,29 +149,4 @@ func GetSecret(secretName string, filter string) (string, error) {
 	}
 
 	return string(decoded), nil
-}
-
-// ExtractNamespaceFromConfig extracts the namespace of a given application
-// from the Helm release information from an also given kubeconfig file (path).
-func ExtractNamespaceFromConfig(appName string, kubeconfig string) (string, error) {
-	args := []string{}
-	if kubeconfig != "" {
-		args = append(args, "--kubeconfig", kubeconfig)
-	}
-	args = append(args, "list", "-aA", "-f", appName, "-o", "json")
-
-	out, err := utils.RunCmdOutput(zerolog.DebugLevel, "helm", args...)
-	if err != nil {
-		return "", utils.Errorf(err, L("failed to detect %s's namespace using helm"), appName)
-	}
-
-	var data []releaseInfo
-	if err = json.Unmarshal(out, &data); err != nil {
-		return "", utils.Errorf(err, L("helm provided an invalid JSON output"))
-	}
-
-	if len(data) == 1 {
-		return data[0].Namespace, nil
-	}
-	return "", errors.New(L("found no or more than one deployment"))
 }

@@ -23,7 +23,7 @@ func kubernetesStatus(
 	args []string,
 ) error {
 	cnx := shared.NewConnection("kubectl", "", kubernetes.ProxyFilter)
-	namespace, err := cnx.GetNamespace()
+	namespace, err := cnx.GetNamespace("")
 	if err != nil {
 		return err
 	}
