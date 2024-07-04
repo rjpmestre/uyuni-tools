@@ -399,7 +399,7 @@ func chooseBackend[F interface{}](
 }
 
 // extractNamespaceFromConfig extracts the namespace of a given application
-// from the Helm release information from an also given kubeconfig file (path).
+// from the Helm release information.
 func extractNamespaceFromConfig(appName string, kubeconfig string) (string, error) {
 	args := []string{}
 	if kubeconfig != "" {
