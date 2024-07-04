@@ -145,17 +145,7 @@ func (c *Connection) GetNamespace(appName string, filters ...string) (string, er
 		}
 	}
 
-	// try to get the namespace from the deployment
-	jsonpath := fmt.Sprintf("jsonpath={.items[?(@.metadata.name==\"%s\")].metadata.namespace}", appName)
-	args := []string{"get", "-A", "deploy", "-o", jsonpath}
-	args = append(args, filters...)
-
-	if namespace, _ := utils.RunCmdOutput(zerolog.DebugLevel, "kubectl", args...); len(namespace) != 0 {
-		c.namespace = string(namespace[:])
-		return c.namespace, nil
-	}
-
-	// if namespace was not retrieved yet, try to get it from the helm release
+	// retrieving namespace from helm release
 	clusterInfos, clusterInfosErr := kubernetes.CheckCluster()
 	if clusterInfosErr != nil {
 		return "", utils.Errorf(clusterInfosErr, L("failed to discover the cluster type"))
