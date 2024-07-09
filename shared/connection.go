@@ -123,7 +123,7 @@ func (c *Connection) GetNamespace(appName string, filters ...string) (string, er
 
 	command, cmdErr := c.GetCommand()
 	if cmdErr != nil {
-		log.Fatal().Err(cmdErr)
+		return "", cmdErr
 	}
 
 	// skip if the command is not resolvable or does not target kubectl
