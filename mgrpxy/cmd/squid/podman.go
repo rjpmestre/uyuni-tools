@@ -29,5 +29,5 @@ func podmanSquidClear(
 		return utils.Errorf(err, L("failed to re-create the cache directories"))
 	}
 
-	return podman.EnableService(podman.ProxyService)
+	return podman.RestartService(podman.ProxyService)
 }
