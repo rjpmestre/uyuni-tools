@@ -19,9 +19,10 @@ func kubernetesSquidClear(
 	cmd *cobra.Command,
 	args []string,
 ) error {
-	cnx := shared.NewConnection("kubectl", "", kubernetes.ProxyFilter)
+	cnx := shared.NewConnection("kubectl", "squid", kubernetes.ProxyFilter)
+	// cnx.Container = "squid"
 
-	if _, err := cnx.ExecInKubernetesContainer("squid", "find", "/var/cache/squid", "-mindepth", "1", "-delete"); err != nil {
+	if _, err := cnx.Exec("find", "/var/cache/squid", "-mindepth", "1", "-delete"); err != nil {
 		return utils.Errorf(err, L("failed to remove cached data"))
 	}
 

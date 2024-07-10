@@ -24,23 +24,22 @@ import (
 
 // Connection contains information about how to connect to the server.
 type Connection struct {
-	backend             string
-	command             string
-	podName             string
-	podmanContainer     string
-	kubernetesFilter    string
-	namespace           string
-	kubernetesContainer string
+	backend          string
+	command          string
+	podName          string
+	kubernetesFilter string
+	namespace        string
+	container        string
 }
 
 // Create a new connection object.
 // The backend is either the command to use to connect to the container or the empty string.
 //
 // The empty strings means automatic detection of the backend where the uyuni container is running.
-// podmanContainer is the name of a podman container to look for when detecting the command.
+// container is the name of a container to look for when detecting the command.
 // kubernetesFilter is a filter parameter to use to match a pod.
-func NewConnection(backend string, podmanContainer string, kubernetesFilter string) *Connection {
-	cnx := Connection{backend: backend, podmanContainer: podmanContainer, kubernetesFilter: kubernetesFilter}
+func NewConnection(backend string, container string, kubernetesFilter string) *Connection {
+	cnx := Connection{backend: backend, container: container, kubernetesFilter: kubernetesFilter}
 
 	return &cnx
 }
@@ -80,7 +79,7 @@ func (c *Connection) GetCommand() (string, error) {
 			for _, bin := range bins {
 				if _, err = exec.LookPath(bin); err == nil {
 					hasPodman = true
-					if checkErr := utils.RunCmd(bin, "inspect", c.podmanContainer, "--format", "{{.Name}}"); checkErr == nil {
+					if checkErr := utils.RunCmd(bin, "inspect", c.container, "--format", "{{.Name}}"); checkErr == nil {
 						c.command = bin
 						break
 					}
@@ -179,10 +178,10 @@ func (c *Connection) GetPodName() (string, error) {
 		case "podman-remote":
 			fallthrough
 		case "podman":
-			if out, _ := utils.RunCmdOutput(zerolog.DebugLevel, c.command, "ps", "-q", "-f", "name="+c.podmanContainer); len(out) == 0 {
-				err = fmt.Errorf(L("container %s is not running on podman"), c.podmanContainer)
+			if out, _ := utils.RunCmdOutput(zerolog.DebugLevel, c.command, "ps", "-q", "-f", "name="+c.container); len(out) == 0 {
+				err = fmt.Errorf(L("container %s is not running on podman"), c.container)
 			} else {
-				c.podName = c.podmanContainer
+				c.podName = c.container
 			}
 		case "kubectl":
 			// We try the first item on purpose to make the command fail if not available
@@ -196,12 +195,6 @@ func (c *Connection) GetPodName() (string, error) {
 	}
 
 	return c.podName, err
-}
-
-// ExecInKubernetesContainer runs command within an sh shell targeting a specific container.
-func (c *Connection) ExecInKubernetesContainer(kubernetesContainer string, command string, args ...string) ([]byte, error) {
-	c.kubernetesContainer = kubernetesContainer
-	return c.Exec(command, args...)
 }
 
 // Exec runs command inside the container within an sh shell.
@@ -224,10 +217,11 @@ func (c *Connection) Exec(command string, args ...string) ([]byte, error) {
 			return nil, utils.Errorf(err, L("failed to retrieve namespace "))
 		}
 
-		if c.kubernetesContainer == "" {
-			c.kubernetesContainer = "uyuni"
+		if c.container == "" {
+			c.container = "uyuni"
 		}
-		cmdArgs = append(cmdArgs, "-n", c.namespace, "-c", c.kubernetesContainer, "--")
+
+		cmdArgs = append(cmdArgs, "-n", c.namespace, "-c", c.container, "--")
 	}
 	shellArgs := append([]string{command}, args...)
 	cmdArgs = append(cmdArgs, shellArgs...)
