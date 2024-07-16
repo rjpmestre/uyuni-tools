@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package squid
+package cache
 
 import (
 	"github.com/spf13/cobra"
@@ -12,17 +12,17 @@ import (
 	"github.com/uyuni-project/uyuni-tools/shared/utils"
 )
 
-type squidClearFlags struct {
+type cacheClearFlags struct {
 }
 
-// NewCommand for clearing squid cache.
+// NewCommand for clearing cache.
 func NewClearCmd(globalFlags *types.GlobalFlags) *cobra.Command {
 	var clearCmd = &cobra.Command{
 		Use:   "clear",
-		Short: L("Clear the Squid cache"),
-		Long:  L("Clear the Squid cache"),
+		Short: L("Clear the cache"),
+		Long:  L("Clear the cache"),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var flags squidClearFlags
+			var flags cacheClearFlags
 			return utils.CommandHelper(globalFlags, cmd, args, &flags, clear)
 		},
 	}
@@ -30,8 +30,8 @@ func NewClearCmd(globalFlags *types.GlobalFlags) *cobra.Command {
 	return clearCmd
 }
 
-func clear(globalFlags *types.GlobalFlags, flags *squidClearFlags, cmd *cobra.Command, args []string) error {
-	fn, err := shared.ChooseProxyPodmanOrKubernetes(cmd.Flags(), podmanSquidClear, kubernetesSquidClear)
+func clear(globalFlags *types.GlobalFlags, flags *cacheClearFlags, cmd *cobra.Command, args []string) error {
+	fn, err := shared.ChooseProxyPodmanOrKubernetes(cmd.Flags(), podmanCacheClear, kubernetesCacheClear)
 	if err != nil {
 		return err
 	}

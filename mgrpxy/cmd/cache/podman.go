@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package squid
+package cache
 
 import (
 	"github.com/spf13/cobra"
@@ -13,9 +13,9 @@ import (
 	"github.com/uyuni-project/uyuni-tools/shared/utils"
 )
 
-func podmanSquidClear(
+func podmanCacheClear(
 	globalFlags *types.GlobalFlags,
-	flags *squidClearFlags,
+	flags *cacheClearFlags,
 	cmd *cobra.Command,
 	args []string,
 ) error {

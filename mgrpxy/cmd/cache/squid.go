@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package squid
+package cache
 
 import (
 	"github.com/spf13/cobra"
@@ -10,18 +10,18 @@ import (
 	"github.com/uyuni-project/uyuni-tools/shared/types"
 )
 
-// NewCommand entry command for managing squid cache.
+// NewCommand entry command for managing cache.
 // Setup for subcommand to clear (the cache).
 func NewCommand(globalFlags *types.GlobalFlags) *cobra.Command {
-	var squidCmd = &cobra.Command{
-		Use:   "squid",
-		Short: L("Manage Squid cache"),
-		Long:  L("Manage Squid cache"),
+	var cacheCmd = &cobra.Command{
+		Use:   "cache",
+		Short: L("Manage proxy cache"),
+		Long:  L("Manage proxy cache"),
 		Run: func(cmd *cobra.Command, args []string) {
 			_ = cmd.Help()
 		},
 	}
 
-	squidCmd.AddCommand(NewClearCmd(globalFlags))
-	return squidCmd
+	cacheCmd.AddCommand(NewClearCmd(globalFlags))
+	return cacheCmd
 }
