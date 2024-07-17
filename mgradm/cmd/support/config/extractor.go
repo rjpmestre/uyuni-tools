@@ -26,7 +26,14 @@ import (
 )
 
 func extract(globalFlags *types.GlobalFlags, flags *configFlags, cmd *cobra.Command, args []string) error {
-	cnx := shared.NewConnection(flags.Backend, podman.ServerContainerName, kubernetes.ServerFilter)
+	var containerName string
+	if podman.HasService(podman.ServerService) {
+		containerName = podman.ServerContainerName
+	} else if utils.IsInstalled("kubectl") && utils.IsInstalled("helm") {
+		containerName = kubernetes.ServerApp
+	}
+
+	cnx := shared.NewConnection(flags.Backend, containerName, kubernetes.ServerFilter)
 
 	// Copy the generated file locally
 	tmpDir, err := os.MkdirTemp("", "mgradm-*")
