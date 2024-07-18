@@ -382,6 +382,16 @@ func chooseBackend[F interface{}](
 	return nil, errors.New(L("no supported backend found"))
 }
 
+// ChooseObjPodmanOrKubernetes returns an artibraty object depending if podman or the kubernetes is installed.
+func ChooseObjPodmanOrKubernetes(podmanOption interface{}, kubernetesOption interface{}) (interface{}, error) {
+	if podman.HasService(podman.ServerService) || podman.HasService(podman.ProxyService) {
+		return podmanOption, nil
+	} else if utils.IsInstalled("kubectl") || utils.IsInstalled("helm") {
+		return kubernetesOption, nil
+	}
+	return nil, errors.New(L("failed to determine suitable backend"))
+}
+
 // extractNamespaceFromConfig extracts the namespace of a given application
 // from the Helm release information.
 func extractNamespaceFromConfig(appName string, kubeconfig string) (string, error) {
