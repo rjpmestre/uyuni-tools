@@ -79,10 +79,12 @@ func InspectKubernetes(serverImage string, pullPolicy string) (map[string]string
 	}
 
 	//this is needed because folder with script needs to be mounted
-	nodeName, err := GetNode("uyuni")
+	nodeName, err := GetNode(ServerFilter)
 	if err != nil {
 		return map[string]string{}, utils.Errorf(err, L("cannot find node running uyuni"))
 	}
+
+	// nodeName := "uyuni-master-k3s-srv"
 
 	//generate deploy data
 	deployData := types.Deployment{
