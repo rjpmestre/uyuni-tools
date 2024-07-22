@@ -29,7 +29,7 @@ func InstallK3sTraefikConfig(debug bool) {
 }
 
 // RunPgsqlVersionUpgrade perform a PostgreSQL major upgrade.
-func RunPgsqlVersionUpgrade(image types.ImageFlags, upgradeImage types.ImageFlags, nodeName string, oldPgsql string, newPgsql string) error {
+func RunPgsqlVersionUpgrade(image types.ImageFlags, upgradeImage types.ImageFlags, namespace string, nodeName string, oldPgsql string, newPgsql string) error {
 	scriptDir, err := os.MkdirTemp("", "mgradm-*")
 	defer os.RemoveAll(scriptDir)
 	if err != nil {
@@ -61,7 +61,7 @@ func RunPgsqlVersionUpgrade(image types.ImageFlags, upgradeImage types.ImageFlag
 		}
 
 		//delete pending pod and then check the node, because in presence of more than a pod GetNode return is wrong
-		if err := kubernetes.DeletePod(pgsqlVersionUpgradeContainer, kubernetes.ServerFilter); err != nil {
+		if err := kubernetes.DeletePod(namespace, pgsqlVersionUpgradeContainer, kubernetes.ServerFilter); err != nil {
 			return utils.Errorf(err, L("cannot delete %s"), pgsqlVersionUpgradeContainer)
 		}
 
@@ -89,7 +89,7 @@ func RunPgsqlVersionUpgrade(image types.ImageFlags, upgradeImage types.ImageFlag
 			return err
 		}
 
-		err = kubernetes.RunPod(pgsqlVersionUpgradeContainer, kubernetes.ServerFilter, upgradeImageUrl, image.PullPolicy, "/var/lib/uyuni-tools/"+pgsqlVersionUpgradeScriptName, overridePgsqlVersioUpgrade)
+		err = kubernetes.RunPod(namespace, pgsqlVersionUpgradeContainer, kubernetes.ServerFilter, upgradeImageUrl, image.PullPolicy, "/var/lib/uyuni-tools/"+pgsqlVersionUpgradeScriptName, overridePgsqlVersioUpgrade)
 		if err != nil {
 			return utils.Errorf(err, L("error running container %s"), pgsqlVersionUpgradeContainer)
 		}
@@ -98,7 +98,7 @@ func RunPgsqlVersionUpgrade(image types.ImageFlags, upgradeImage types.ImageFlag
 }
 
 // RunPgsqlFinalizeScript run the script with all the action required to a db after upgrade.
-func RunPgsqlFinalizeScript(serverImage string, pullPolicy string, nodeName string, schemaUpdateRequired bool) error {
+func RunPgsqlFinalizeScript(namespace string, serverImage string, pullPolicy string, nodeName string, schemaUpdateRequired bool) error {
 	scriptDir, err := os.MkdirTemp("", "mgradm-*")
 	defer os.RemoveAll(scriptDir)
 	if err != nil {
@@ -110,7 +110,7 @@ func RunPgsqlFinalizeScript(serverImage string, pullPolicy string, nodeName stri
 		return utils.Errorf(err, L("cannot generate PostgreSQL finalization script"))
 	}
 	//delete pending pod and then check the node, because in presence of more than a pod GetNode return is wrong
-	if err := kubernetes.DeletePod(pgsqlFinalizeContainer, kubernetes.ServerFilter); err != nil {
+	if err := kubernetes.DeletePod(namespace, pgsqlFinalizeContainer, kubernetes.ServerFilter); err != nil {
 		return utils.Errorf(err, L("cannot delete %s"), pgsqlFinalizeContainer)
 	}
 	//generate deploy data
@@ -135,7 +135,7 @@ func RunPgsqlFinalizeScript(serverImage string, pullPolicy string, nodeName stri
 	if err != nil {
 		return err
 	}
-	err = kubernetes.RunPod(pgsqlFinalizeContainer, kubernetes.ServerFilter, serverImage, pullPolicy, "/var/lib/uyuni-tools/"+pgsqlFinalizeScriptName, overridePgsqlFinalize)
+	err = kubernetes.RunPod(namespace, pgsqlFinalizeContainer, kubernetes.ServerFilter, serverImage, pullPolicy, "/var/lib/uyuni-tools/"+pgsqlFinalizeScriptName, overridePgsqlFinalize)
 	if err != nil {
 		return utils.Errorf(err, L("error running container %s"), pgsqlFinalizeContainer)
 	}
@@ -143,7 +143,7 @@ func RunPgsqlFinalizeScript(serverImage string, pullPolicy string, nodeName stri
 }
 
 // RunPostUpgradeScript run the script with the changes to apply after the upgrade.
-func RunPostUpgradeScript(serverImage string, pullPolicy string, nodeName string) error {
+func RunPostUpgradeScript(serverImage string, pullPolicy string, namespace string, nodeName string) error {
 	scriptDir, err := os.MkdirTemp("", "mgradm-*")
 	defer os.RemoveAll(scriptDir)
 	if err != nil {
@@ -156,7 +156,7 @@ func RunPostUpgradeScript(serverImage string, pullPolicy string, nodeName string
 	}
 
 	//delete pending pod and then check the node, because in presence of more than a pod GetNode return is wrong
-	if err := kubernetes.DeletePod(postUpgradeContainer, kubernetes.ServerFilter); err != nil {
+	if err := kubernetes.DeletePod(namespace, postUpgradeContainer, kubernetes.ServerFilter); err != nil {
 		return utils.Errorf(err, L("cannot delete %s"), postUpgradeContainer)
 	}
 	//generate deploy data
@@ -182,7 +182,7 @@ func RunPostUpgradeScript(serverImage string, pullPolicy string, nodeName string
 		return err
 	}
 
-	err = kubernetes.RunPod(postUpgradeContainer, kubernetes.ServerFilter, serverImage, pullPolicy, "/var/lib/uyuni-tools/"+postUpgradeScriptName, overridePostUpgrade)
+	err = kubernetes.RunPod(namespace, postUpgradeContainer, kubernetes.ServerFilter, serverImage, pullPolicy, "/var/lib/uyuni-tools/"+postUpgradeScriptName, overridePostUpgrade)
 	if err != nil {
 		return utils.Errorf(err, L("error running container %s"), postUpgradeContainer)
 	}

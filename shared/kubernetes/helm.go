@@ -41,6 +41,7 @@ func HelmUpgrade(kubeconfig string, namespace string, install bool,
 		helmArgs = append(helmArgs, "--version", version)
 	}
 	if install {
+		helmArgs = append(helmArgs, "--set", "extraLabels.installedby='mgradm'")
 		helmArgs = append(helmArgs, "--install")
 	}
 

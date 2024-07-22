@@ -117,8 +117,10 @@ func (c *Connection) GetCommand() (string, error) {
 func (c *Connection) GetNamespace(appName string, filters ...string) (string, error) {
 	// skip if namespace is already set
 	if c.namespace != "" {
+		log.Debug().Msgf(L("### Connection > GetNamespace already set to %s"), c.namespace)
 		return c.namespace, nil
 	}
+	log.Debug().Msgf(L("### Connection > Retrieving namespace..."))
 
 	command, cmdErr := c.GetCommand()
 	if cmdErr != nil {
@@ -156,7 +158,7 @@ func (c *Connection) GetNamespace(appName string, filters ...string) (string, er
 	}
 
 	var namespaceErr error
-	c.namespace, namespaceErr = extractNamespaceFromConfig(appName, kubeconfig)
+	c.namespace, namespaceErr = extractNamespaceFromConfig(appName, kubeconfig, filters...)
 	if namespaceErr != nil {
 		return "", utils.Errorf(namespaceErr, L("failed to find the %s deployment namespace"), appName)
 	}
@@ -386,7 +388,7 @@ func chooseBackend[F interface{}](
 func ChooseObjPodmanOrKubernetes(podmanOption interface{}, kubernetesOption interface{}) (interface{}, error) {
 	if podman.HasService(podman.ServerService) || podman.HasService(podman.ProxyService) {
 		return podmanOption, nil
-	} else if utils.IsInstalled("kubectl") || utils.IsInstalled("helm") {
+	} else if utils.IsInstalled("kubectl") && utils.IsInstalled("helm") {
 		return kubernetesOption, nil
 	}
 	return nil, errors.New(L("failed to determine suitable backend"))
@@ -394,12 +396,13 @@ func ChooseObjPodmanOrKubernetes(podmanOption interface{}, kubernetesOption inte
 
 // extractNamespaceFromConfig extracts the namespace of a given application
 // from the Helm release information.
-func extractNamespaceFromConfig(appName string, kubeconfig string) (string, error) {
+func extractNamespaceFromConfig(appName string, kubeconfig string, filters ...string) (string, error) {
 	args := []string{}
 	if kubeconfig != "" {
 		args = append(args, "--kubeconfig", kubeconfig)
 	}
 	args = append(args, "list", "-aA", "-f", appName, "-o", "json")
+	args = append(args, filters...)
 
 	out, err := utils.RunCmdOutput(zerolog.DebugLevel, "helm", args...)
 	if err != nil {

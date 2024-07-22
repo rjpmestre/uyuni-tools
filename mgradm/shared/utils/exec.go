@@ -159,7 +159,6 @@ func GenerateMigrationScript(sourceFqdn string, user string, kubernetes bool) (s
 // RunningImage returns the image running in the current system.
 func RunningImage(cnx *shared.Connection, containerName string) (string, error) {
 	command, err := cnx.GetCommand()
-
 	switch command {
 	case "podman":
 		args := []string{"ps", "--format", "{{.Image}}", "--noheading"}

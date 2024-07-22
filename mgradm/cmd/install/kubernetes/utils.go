@@ -56,15 +56,16 @@ func installForKubernetes(globalFlags *types.GlobalFlags,
 		return err
 	}
 
+	log.Info().Msgf(L(">>>> kubernetes.DeployCertificate ..."))
 	// Deploy the SSL CA or server certificate
 	ca := ssl.SslPair{}
-	sslArgs, err := kubernetes.DeployCertificate(&flags.Helm, &flags.Ssl, "", &ca, clusterInfos.GetKubeconfig(), fqdn,
-		flags.Image.PullPolicy)
+	sslArgs, err := kubernetes.DeployCertificate(&flags.Helm, &flags.Ssl, "", &ca, clusterInfos.GetKubeconfig(), fqdn, flags.Image.PullPolicy)
 	if err != nil {
 		return shared_utils.Errorf(err, L("cannot deploy certificate"))
 	}
 	helmArgs = append(helmArgs, sslArgs...)
 
+	log.Info().Msgf(L(">>>> kubernetes.Deploy ..."))
 	// Deploy Uyuni and wait for it to be up
 	if err := kubernetes.Deploy(cnx, &flags.Image, &flags.Helm, &flags.Ssl, clusterInfos, fqdn, flags.Debug.Java, helmArgs...); err != nil {
 		return shared_utils.Errorf(err, L("cannot deploy uyuni"))
@@ -75,7 +76,14 @@ func installForKubernetes(globalFlags *types.GlobalFlags,
 		"NO_SSL": "Y",
 	}
 
+	log.Info().Msgf(L(">>>> install_shared.RunSetup ..."))
 	if err := install_shared.RunSetup(cnx, &flags.InstallFlags, args[0], envs); err != nil {
+		namespace, err := cnx.GetNamespace("")
+		if err != nil {
+			return shared_utils.Errorf(err, L("cannot deploy certificate"))
+		}
+
+		if stopErr := shared_kubernetes.Stop(namespace, shared_kubernetes.ServerFilter); stopErr != nil {
 		if stopErr := shared_kubernetes.Stop(shared_kubernetes.ServerFilter); stopErr != nil {
 			log.Error().Msgf("Failed to stop service: %v", stopErr)
 		}

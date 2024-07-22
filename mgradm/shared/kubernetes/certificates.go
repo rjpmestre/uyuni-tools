@@ -53,12 +53,13 @@ func installTlsSecret(namespace string, serverCrt []byte, serverKey []byte, root
 // Returns helm arguments to be added to use the issuer.
 func installSslIssuers(helmFlags *cmd_utils.HelmFlags, sslFlags *cmd_utils.SslCertFlags, rootCa string,
 	tlsCert *ssl.SslPair, kubeconfig, fqdn string, imagePullPolicy string) ([]string, error) {
+
+	log.Debug().Msg(L(">>>> Certificates > installSslIssuers > init ..."))
 	// Install cert-manager if needed
 	if err := installCertManager(helmFlags, kubeconfig, imagePullPolicy); err != nil {
 		return []string{}, utils.Errorf(err, L("cannot install cert manager"))
 	}
 
-	log.Info().Msg(L("Creating SSL certificate issuer"))
 	crdsDir, err := os.MkdirTemp("", "mgradm-*")
 	if err != nil {
 		return []string{}, utils.Errorf(err, L("failed to create temporary directory"))
@@ -81,20 +82,34 @@ func installSslIssuers(helmFlags *cmd_utils.HelmFlags, sslFlags *cmd_utils.SslCe
 		Certificate: tlsCert.Cert,
 	}
 
+	log.Debug().Msg(L(">>>> Certificates > WriteTemplateToFile ..."))
 	if err = utils.WriteTemplateToFile(issuerData, issuerPath, 0500, true); err != nil {
 		return []string{}, utils.Errorf(err, L("failed to generate issuer definition"))
 	}
 
+	log.Debug().Msgf(L(">>>> Certificates > asserting namespace %s exists..."), issuerData.Namespace)
+	errNamespaceCheck := utils.RunCmd("kubectl", "get", "namespace", issuerData.Namespace)
+	if errNamespaceCheck != nil {
+		log.Debug().Msg(L(">>>> Certificates > namespace doesn't exist, creating it..."))
+		errNamespaceCreate := utils.RunCmd("kubectl", "create", "namespace", issuerData.Namespace)
+		if errNamespaceCreate != nil {
+			log.Fatal().Err(err).Msg(L("Failed to create namespace"))
+		}
+	}
+
+	log.Debug().Msgf(L(">>>> Certificates > applying issuer %s ..."), issuerPath)
 	err = utils.RunCmd("kubectl", "apply", "-f", issuerPath)
 	if err != nil {
 		log.Fatal().Err(err).Msg(L("Failed to create issuer"))
 	}
 
+	log.Debug().Msg(L(">>>> Certificates > Waitting for issuer to be ready ..."))
 	// Wait for issuer to be ready
 	for i := 0; i < 60; i++ {
 		out, err := utils.RunCmdOutput(zerolog.DebugLevel, "kubectl", "get", "-o=jsonpath={.status.conditions[*].type}",
-			"issuer", "uyuni-ca-issuer")
+			"issuer", "uyuni-ca-issuer", "-n", issuerData.Namespace)
 		if err == nil && string(out) == "Ready" {
+			log.Debug().Msg(L(">>>> Certificates > issuer ready"))
 			return []string{"--set-json", "ingressSslAnnotations={\"cert-manager.io/issuer\": \"uyuni-ca-issuer\"}"}, nil
 		}
 		time.Sleep(1 * time.Second)
@@ -126,6 +141,8 @@ func installCertManager(helmFlags *cmd_utils.HelmFlags, kubeconfig string, image
 			repo = "https://charts.jetstack.io"
 			chart = "cert-manager"
 		}
+
+		log.Debug().Msgf(L(">>>  Certificates > installCertManager > Running helm upgrade for cert-manager"))
 		// The installedby label will be used to only uninstall what we installed
 		if err := kubernetes.HelmUpgrade(kubeconfig, namespace, true, repo, "cert-manager", chart, version, args...); err != nil {
 			return utils.Errorf(err, L("cannot run helm upgrade"))
@@ -141,20 +158,20 @@ func installCertManager(helmFlags *cmd_utils.HelmFlags, kubeconfig string, image
 	return nil
 }
 
-func extractCaCertToConfig() {
+func extractCaCertToConfig(namespace string) {
 	// TODO Replace with [trust-manager](https://cert-manager.io/docs/projects/trust-manager/) to automate this
 	const jsonPath = "-o=jsonpath={.data.ca\\.crt}"
 
 	log.Info().Msg(L("Extracting CA certificate to a configmap"))
 	// Skip extracting if the configmap is already present
-	out, err := utils.RunCmdOutput(zerolog.DebugLevel, "kubectl", "get", "configmap", "uyuni-ca", jsonPath)
+	out, err := utils.RunCmdOutput(zerolog.DebugLevel, "kubectl", "get", "configmap", "uyuni-ca", jsonPath, "-n", namespace)
 	log.Info().Msgf(L("CA cert: %s"), string(out))
 	if err == nil && len(out) > 0 {
 		log.Info().Msg(L("uyuni-ca configmap already existing, skipping extraction"))
 		return
 	}
 
-	out, err = utils.RunCmdOutput(zerolog.DebugLevel, "kubectl", "get", "secret", "uyuni-ca", jsonPath)
+	out, err = utils.RunCmdOutput(zerolog.DebugLevel, "kubectl", "get", "secret", "uyuni-ca", jsonPath, "-n", namespace)
 	if err != nil {
 		log.Fatal().Err(err).Msgf(L("Failed to get uyuni-ca certificate"))
 	}

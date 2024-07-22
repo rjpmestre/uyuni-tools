@@ -39,6 +39,10 @@ func migrateToKubernetes(
 		}
 	}
 	cnx := shared.NewConnection("kubectl", "", shared_kubernetes.ServerFilter)
+	namespace, err := cnx.GetNamespace("")
+	if err != nil {
+		return utils.Errorf(err, L("failed retrieving namespace"))
+	}
 
 	serverImage, err := utils.ComputeImage(flags.Image)
 	if err != nil {
@@ -81,7 +85,7 @@ func migrateToKubernetes(
 
 	//this is needed because folder with script needs to be mounted
 	//check the node before scaling down
-	nodeName, err := shared_kubernetes.GetNode("uyuni")
+	nodeName, err := shared_kubernetes.GetNode(namespace, "uyuni")
 	if err != nil {
 		return utils.Errorf(err, L("cannot find node running uyuni"))
 	}
@@ -96,15 +100,15 @@ func migrateToKubernetes(
 	}
 
 	// After each command we want to scale to 0
-	err = shared_kubernetes.ReplicasTo(shared_kubernetes.ServerApp, 0)
+	err = shared_kubernetes.ReplicasTo(namespace, shared_kubernetes.ServerApp, 0)
 	if err != nil {
 		return utils.Errorf(err, L("cannot set replicas to 0"))
 	}
 
 	defer func() {
 		// if something is running, we don't need to set replicas to 1
-		if _, err = shared_kubernetes.GetNode("uyuni"); err != nil {
-			err = shared_kubernetes.ReplicasTo(shared_kubernetes.ServerApp, 1)
+		if _, err = shared_kubernetes.GetNode(namespace, "uyuni"); err != nil {
+			err = shared_kubernetes.ReplicasTo(namespace, shared_kubernetes.ServerApp, 1)
 		}
 	}()
 
@@ -134,23 +138,23 @@ func migrateToKubernetes(
 		return utils.Errorf(err, L("cannot wait for deployment of %s"), serverImage)
 	}
 
-	err = shared_kubernetes.ReplicasTo(shared_kubernetes.ServerApp, 0)
+	err = shared_kubernetes.ReplicasTo(namespace, shared_kubernetes.ServerApp, 0)
 	if err != nil {
 		return utils.Errorf(err, L("cannot set replicas to 0"))
 	}
 
 	if oldPgVersion != newPgVersion {
-		if err := kubernetes.RunPgsqlVersionUpgrade(flags.Image, flags.DbUpgradeImage, nodeName, oldPgVersion, newPgVersion); err != nil {
+		if err := kubernetes.RunPgsqlVersionUpgrade(flags.Image, flags.DbUpgradeImage, namespace, nodeName, oldPgVersion, newPgVersion); err != nil {
 			return utils.Errorf(err, L("cannot run PostgreSQL version upgrade script"))
 		}
 	}
 
 	schemaUpdateRequired := oldPgVersion != newPgVersion
-	if err := kubernetes.RunPgsqlFinalizeScript(serverImage, flags.Image.PullPolicy, nodeName, schemaUpdateRequired); err != nil {
+	if err := kubernetes.RunPgsqlFinalizeScript(serverImage, flags.Image.PullPolicy, namespace, nodeName, schemaUpdateRequired); err != nil {
 		return utils.Errorf(err, L("cannot run PostgreSQL version upgrade script"))
 	}
 
-	if err := kubernetes.RunPostUpgradeScript(serverImage, flags.Image.PullPolicy, nodeName); err != nil {
+	if err := kubernetes.RunPostUpgradeScript(serverImage, flags.Image.PullPolicy, namespace, nodeName); err != nil {
 		return utils.Errorf(err, L("cannot run post upgrade script"))
 	}
 
