@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/uyuni-project/uyuni-tools/mgrpxy/shared/utils"
+	"github.com/uyuni-project/uyuni-tools/shared"
 	"github.com/uyuni-project/uyuni-tools/shared/kubernetes"
 	. "github.com/uyuni-project/uyuni-tools/shared/l10n"
 	shared_utils "github.com/uyuni-project/uyuni-tools/shared/utils"
@@ -166,15 +167,25 @@ func Upgrade(flags *KubernetesProxyUpgradeFlags, cmd *cobra.Command, args []stri
 		return err
 	}
 
-	err = kubernetes.ReplicasTo(kubernetes.ProxyApp, 0)
+	cnx := shared.NewConnection("kubectl", "", kubernetes.ProxyFilter)
+	namespace, err := cnx.GetNamespace("")
+	if err != nil {
+		return shared_utils.Errorf(err, L("failed to find the uyuni deployment namespace"))
+	}
+
+	if _, err = kubernetes.GetNode(namespace, kubernetes.ProxyApp); err != nil {
+		err = kubernetes.ReplicasTo(namespace, kubernetes.ProxyApp, 1)
+	}
+
+	err = kubernetes.ReplicasTo(namespace, kubernetes.ProxyApp, 0)
 	if err != nil {
 		return err
 	}
 
 	defer func() {
 		// if something is running, we don't need to set replicas to 1
-		if _, err = kubernetes.GetNode("uyuni"); err != nil {
-			err = kubernetes.ReplicasTo(kubernetes.ProxyApp, 1)
+		if _, err = kubernetes.GetNode(namespace, kubernetes.ProxyApp); err != nil {
+			err = kubernetes.ReplicasTo(namespace, kubernetes.ProxyApp, 1)
 		}
 	}()
 

@@ -93,6 +93,7 @@ func getContainerNames(cmd *cobra.Command, args []string, toComplete string) ([]
 			return []string{podName}, cobra.ShellCompDirectiveNoFileComp
 		} else if len(args) == 1 {
 			names = getNames(exec.Command("kubectl", "get", "pod", args[0], "-o", "jsonpath={.spec.containers[*].name}"), " ", "")
+			log.Debug().Msgf("Containers in pod %s: %v", args[0], names)
 		} else {
 			//kubernetes log only accepts either 1 container name or the --all-containers flag.
 			return names, cobra.ShellCompDirectiveNoFileComp
