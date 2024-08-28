@@ -4,7 +4,9 @@
 
 package api
 
-import "net/http"
+import (
+	"net/http"
+)
 
 const root_path_apiv1 = "/rhn/manager/api"
 const api_credentials_store = ".uyuni-api.json"

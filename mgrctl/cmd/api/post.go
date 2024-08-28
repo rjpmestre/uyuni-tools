@@ -51,6 +51,7 @@ func runPost(globalFlags *types.GlobalFlags, flags *apiFlags, cmd *cobra.Command
 		return utils.Errorf(err, L("error in query '%s'"), path)
 	}
 
+	log.Trace().Msgf("res: %+v", res)
 	if !res.Success {
 		log.Error().Msg(res.Message)
 	}
