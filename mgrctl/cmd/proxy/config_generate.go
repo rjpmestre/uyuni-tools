@@ -5,11 +5,10 @@
 package proxy
 
 import (
-	"bufio"
 	"fmt"
-	"os"
 	"strings"
 
+	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/uyuni-project/uyuni-tools/shared/api"
 	"github.com/uyuni-project/uyuni-tools/shared/api/proxy"
@@ -18,17 +17,11 @@ import (
 	"github.com/uyuni-project/uyuni-tools/shared/utils"
 )
 
-// Flag names by key.
+// Specific flag names for proxy create config with generated certificates command.
 const (
-	proxyName  = "proxyName"
-	proxyPort  = "proxyPort"
-	server     = "server"
-	maxCache   = "maxCache"
-	email      = "email"
 	caCrt      = "caCrt"
 	caKey      = "caKey"
 	caPassword = "caPassword"
-	output     = "output"
 	cNames     = "cnames"
 	country    = "country"
 	state      = "state"
@@ -38,18 +31,9 @@ const (
 	sslEmail   = "sslEmail"
 )
 
-// Set of required fields for validation.
-var ProxyCreateConfigGenerateRequiredFields = [5]string{
-	proxyName,
-	server,
-	email,
-	caCrt,
-	caKey,
-}
-
 // Flags for proxy create config with generated certificates command.
-type proxyCreateConfigGenerateFlags struct {
-	proxyCreateConfigBaseFlags `mapstructure:",squash"`
+type ProxyCreateConfigGenerateFlags struct {
+	ProxyCreateConfigBaseFlags `mapstructure:",squash"`
 	CaCrt                      string
 	CaKey                      string
 	CaPassword                 string
@@ -62,10 +46,19 @@ type proxyCreateConfigGenerateFlags struct {
 	SslEmail                   string
 }
 
+// Set of required fields for validation.
+var ProxyCreateConfigGenerateRequiredFields = [5]string{
+	proxyName,
+	server,
+	email,
+	caCrt,
+	caKey,
+}
+
 // createCmd entry command for managing cache.
 // Setup for subcommand to clear (the cache).
 func NewConfigGenerateCommand(globalFlags *types.GlobalFlags) *cobra.Command {
-	var flags proxyCreateConfigGenerateFlags
+	var flags ProxyCreateConfigGenerateFlags
 
 	createConfigCmd := &cobra.Command{
 		Use:   "generate",
@@ -87,7 +80,11 @@ func NewConfigGenerateCommand(globalFlags *types.GlobalFlags) *cobra.Command {
 	
 	$ mgrctl proxy create config generate --proxyName="proxy.example.com" --server="server.example.com" --email="admin@org.com" --caCrt="ca.pem" --caKey="caKey.pem" --caPassword="pass.txt" --cnames="proxy_a.example.com" --cnames="proxy_b.example.com" --cnames="proxy_c.example.com" --country="PT" --state="Lisbon" --city="Parede" --org="orgExample" --orgUnit="orgUnitExample" --sslEmail="sslEmail@example.com" -o="proxy-config"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return utils.CommandHelper(globalFlags, cmd, args, &flags, proxyCreateConfigGenerate)
+			viper, _ := utils.ReadConfig(cmd, utils.GlobalConfigFilename, globalFlags.ConfigPath)
+			if err := viper.Unmarshal(&flags); err != nil {
+				log.Fatal().Err(err).Msg(L("failed to unmarshall configuration"))
+			}
+			return ProxyCreateConfigGenerate(&flags, api.Init, proxy.ContainerConfigGenerate)
 		},
 	}
 
@@ -115,11 +112,27 @@ func NewConfigGenerateCommand(globalFlags *types.GlobalFlags) *cobra.Command {
 	return createConfigCmd
 }
 
-func proxyCreateConfigGenerate(globalFlags *types.GlobalFlags, flags *proxyCreateConfigGenerateFlags, cmd *cobra.Command, args []string) error {
+// ProxyCreateConfigGenerate command handler.
+func ProxyCreateConfigGenerate(
+	flags *ProxyCreateConfigGenerateFlags,
+	apiInit func(*api.ConnectionDetails) (*api.APIClient, error),
+	proxyConfig func(client *api.APIClient, proxyName string, proxyPort int,
+		server string, maxCache int, email string,
+		caCertificate string, caKey string, caPassword string, cnames []string, country string,
+		state string, city string, org string, orgUnit string, sslEmail string) (*[]int8, error),
+) error {
+	client, err := apiInit(&flags.ConnectionDetails)
+	if err == nil {
+		err = client.Login()
+	}
+	if err != nil {
+		return utils.Errorf(err, L("failed to connect to the server"))
+	}
+
 	// handle caPassword
 	var caPasswordRead string
 	if flags.CaPassword == "" {
-		caPasswordRead = strings.TrimSpace(promptForPassword())
+		caPasswordRead = strings.TrimSpace(PromptForPassword())
 		if caPasswordRead == "" {
 			return fmt.Errorf(L("%s is required"), caPassword)
 		}
@@ -131,22 +144,22 @@ func proxyCreateConfigGenerate(globalFlags *types.GlobalFlags, flags *proxyCreat
 	caCrt := string(utils.ReadFile(flags.CaCrt))
 	caKey := string(utils.ReadFile(flags.CaKey))
 
-	_, err := proxy.ContainerConfig(&flags.ConnectionDetails,
-		flags.ProxyName, flags.ProxyPort, flags.Server, flags.MaxCache, flags.Email, caCrt, caKey, caPasswordRead,
-		flags.CNames, flags.Country, flags.State, flags.City, flags.Org, flags.OrgUnit, flags.SslEmail,
-		flags.Output)
+	data, err := proxyConfig(client, flags.ProxyName, flags.ProxyPort,
+		flags.Server, flags.MaxCache, flags.Email,
+		caCrt, caKey, caPasswordRead, flags.CNames, flags.Country,
+		flags.State, flags.City, flags.Org, flags.OrgUnit, flags.SslEmail)
 
 	if err != nil {
-		return utils.Errorf(err, L("failed to connect to the server"))
+		return utils.Errorf(err, L("failed to execute proxy configuration api request"))
 	}
 
-	return nil
-}
+	// Save the configuration file
+	filename := GetFilename(flags.Output, proxyName)
+	if err := utils.SaveBinaryData(filename, *data); err != nil {
+		return utils.Errorf(err, L("Error saving binary data: %v"), err)
+	}
 
-// Prompt for password.
-func promptForPassword() string {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Printf("Please enter %s: ", caPassword)
-	password, _ := reader.ReadString('\n')
-	return password
+	log.Debug().Msgf("Proxy configuration file saved as %s", filename)
+
+	return nil
 }
